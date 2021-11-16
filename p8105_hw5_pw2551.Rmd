@@ -2,10 +2,37 @@
 title: "Homework 5"
 author: "Paula Wu"
 date: "11/15/2021"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+```
+```{r, message=FALSE}
+library(tidyverse)
+```
+
+## Problem 3
+```{r}
+set.seed(10)
+iris_with_missing = iris %>% 
+  map_df(~replace(.x, sample(1:150, 20), NA)) %>%
+  mutate(Species = as.character(Species)) %>% 
+  janitor::clean_names()  # just to tidy things up
+```
+```{r}
+# function to address problems
+iris_impute = function(col_vec){
+  if(is.character(col_vec)){
+    col_vec = replace_na(col_vec, "virginica")
+  }else if(is.numeric(col_vec)){
+    vec_mean = mean(col_vec, na.rm = TRUE)
+    col_vec = replace_na(col_vec, vec_mean)
+  }
+}
+iris_filled = 
+  map(iris_with_missing, iris_impute) %>% 
+  as_tibble() 
+knitr::kable(iris_filled[1:10,])
 ```
 
