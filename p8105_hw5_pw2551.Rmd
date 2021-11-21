@@ -10,7 +10,13 @@ library(tidyverse)
 ```
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+	fig.width = 8, 
+  fig.height = 6,
+  out.width = "90%"
+)
 options(
   ggplot2.continuous.colour = "viridis",
   ggplot2.continuous.fill = "viridis"
@@ -117,35 +123,38 @@ homicide_df %>%
 <br>
 
 ## Problem 2
+Read in data sets and store in a data frame
 ```{r, message=FALSE, warning=FALSE}
-# read in data sets, store in a data frame
 study_df = 
-  tibble(rel_path = list.files("./data/p2_data", pattern = ".csv")) %>% 
-  mutate(path = str_c("./data/p2_data/", rel_path),  # add prefix to data path
+  tibble(file_names = list.files("./data/p2_data", pattern = ".csv")) %>% 
+  mutate(path = str_c("./data/p2_data/", file_names),  # create relative paths
          content = map(.x = path, ~read_csv(.x))) %>% 
-  separate(rel_path, into = c("arms", "subject_id")) %>% 
+  separate(file_names, into = c("arms", "subject_id")) %>% 
   mutate(arms = as.factor(recode(arms, "con" = "control", "exp" = "experiment"))) %>% 
   select(-path) %>% 
   unnest(content)
+knitr::kable(study_df[1:5,])  # choose to display first five lines on purpose
 ```
+<br>Make a spaghetti plot
 ```{r}
-# make a spaghetti plot
 study_df %>% 
   pivot_longer(week_1:week_8, 
                names_to = "weeks", 
                names_prefix = "week_", 
                values_to = "observations") %>% 
-  mutate(weeks = as.numeric(weeks)) %>% 
-  ggplot(aes(x = weeks, y = observations, group = subject_id)) +
-  geom_line(aes(color = subject_id)) +
+  mutate(weeks = as.numeric(weeks),
+         subjects = str_c(recode(arms, "control" = "con", "experiment" = "exp"), " _ ", subject_id)) %>% 
+  ggplot(aes(x = weeks, y = observations, group = subjects)) +
+  geom_line(aes(color = subjects)) +
   ggtitle("Observation of Subjects by Group") +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(x = "Weeks", y = "Observed Value") +
   facet_grid(.~arms)
 ```
-<br> As we can see from the above spaghetti plot, there's a clear positive trend in the experiment group as time goes by. On the contrary, the overall trend in the control group is nearly horizontal.<br>
+<br> As we can see from the above spaghetti plot, subjects in both groups have similar observed values (observations) in general. As time goes by, the experiment group shows a clear positive trend. On the contrary, the overall trend in the control group is nearly horizontal. Thus, the experiment group has greater observed values than control group did. <br>
 
 ## Problem 3
+Get the dataset
 ```{r}
 set.seed(10)
 iris_with_missing = iris %>% 
@@ -153,8 +162,9 @@ iris_with_missing = iris %>%
   mutate(Species = as.character(Species)) %>% 
   janitor::clean_names()  # just to tidy things up
 ```
+
+Write the function to address problems
 ```{r}
-# function to address problems
 iris_impute = function(col_vec){
   if(is.character(col_vec)){
     col_vec = replace_na(col_vec, "virginica")
@@ -164,14 +174,19 @@ iris_impute = function(col_vec){
   }
   return(col_vec)
 }
-
-# applied the function to the iris_with_missing dataset
+```
+Applied the function to the iris_with_missing dataset
+```{r}
 iris_filled = 
   map(iris_with_missing, iris_impute) %>% 
   as_tibble() 
 ```
+Header of the imputed data set
+```{r}
+knitr::kable(iris_filled[1:10,], digits = 2)
+```
 
-<br>Finally, I generate a table that counts NA values of the `iris_filled` dataset to demonstrate efficacies of the `iris_impute` function
+<br>Finally, I generate a table that counts NA values of the `iris_filled` dataset to demonstrate the efficacy of the `iris_impute()` function
 ```{r, message=FALSE, warning=FALSE}
 iris_filled %>% 
   select(everything()) %>%  
@@ -179,3 +194,6 @@ iris_filled %>%
   knitr::kable()
 ```
 Results above show the completeness of the data set after applying the `iris_impute()` function to `iris_with_missing` data set.
+
+
+
