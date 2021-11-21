@@ -21,13 +21,107 @@ scale_fill_discrete = scale_fill_viridis_d
 
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
+## Problem 1
+This answer is not part of the homework requirement. Just for self-practice purpose
+```{r, message = FALSE}
+# first clean the data set
+homicide_df = 
+  read_csv("./data/homicide-data.csv", na = c("", "Unknown")) %>%  # account for empty/unknown entries
+  mutate(
+    city_state = str_c(city, state),
+    resolution = case_when(
+      disposition == "Closed without arrest" ~ "unsolved",
+      disposition == "Open/No arrest" ~ "unsolved",
+      disposition == "Closed by arrest" ~ "solved"
+    )) %>% 
+  relocate(city_state) %>% 
+  filter(city_state != "TulsaAL")
+```
+First focus on Baltimore, MD
+```{r}
+baltimore_df = 
+  homicide_df %>% 
+  filter(city_state == "BaltimoreMD")
+
+baltimore_summary = 
+  baltimore_df %>% 
+  summarize(
+    unsolved = sum(resolution == "unsolved"),
+    n = n() 
+  )
+
+baltimore_test =
+  prop.test(
+    x = baltimore_summary %>% pull(unsolved), 
+    n = baltimore_summary %>% pull(n))
+
+baltimore_test %>% # for better presentation of the test results
+  broom::tidy()
+```
+Then extend this to the rest of the data set: iterate across cities
+```{r}
+prop_test_function = function(city_df){
+  city_summary = 
+    city_df %>% 
+    summarize(
+      unsolved = sum(resolution == "unsolved"),
+      n = n())
+
+  city_test =
+    prop.test(
+      x = city_summary %>% pull(unsolved), 
+      n = city_summary %>% pull(n))
+
+  return(city_test)
+}
+```
+
+```{r}
+results_df = 
+  homicide_df %>% 
+  nest(data = uid:resolution) %>% 
+  mutate(
+    test_results = map(data, prop_test_function),
+    tidy_results = map(test_results, broom::tidy)
+  ) %>% 
+  select(city_state, tidy_results) %>% 
+  unnest(tidy_results) %>% 
+  select(city_state, estimate, starts_with("conf"))  # get the confidence interval and estimate
+```
+Make a plot showing estimates and confidence interval
+```{r}
+results_df %>% 
+  mutate(city_state = fct_reorder(city_state, estimate)) %>% 
+  ggplot(aes(x = city_state, y = estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+<br> Another way to solve the question using `map2()`, will not evaluate here for concision purpose 
+```{r, eval = FALSE}
+homicide_df %>% 
+  group_by(city_state) %>% 
+  summarize(
+    unsolved = sum(resolution == "unsolved"),
+    n = n()
+  ) %>% 
+  mutate(
+    test_results = map2(unsolved, n, prop.test),
+    tidy_results = map(test_results, broom::tidy)
+  ) %>% 
+  select(city_state, tidy_results) %>% 
+  unnest(tidy_results) %>% 
+  select(city_state, estimate, starts_with("conf"))
+```
+
+<br>
 
 ## Problem 2
 ```{r, message=FALSE, warning=FALSE}
 # read in data sets, store in a data frame
 study_df = 
-  tibble(rel_path = list.files("./data", pattern = ".csv")) %>% 
-  mutate(path = str_c("./data/", rel_path),
+  tibble(rel_path = list.files("./data/p2_data", pattern = ".csv")) %>% 
+  mutate(path = str_c("./data/p2_data/", rel_path),  # add prefix to data path
          content = map(.x = path, ~read_csv(.x))) %>% 
   separate(rel_path, into = c("arms", "subject_id")) %>% 
   mutate(arms = as.factor(recode(arms, "con" = "control", "exp" = "experiment"))) %>% 
@@ -44,10 +138,12 @@ study_df %>%
   mutate(weeks = as.numeric(weeks)) %>% 
   ggplot(aes(x = weeks, y = observations, group = subject_id)) +
   geom_line(aes(color = subject_id)) +
+  ggtitle("Observation of Subjects by Group") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Weeks", y = "Observed Value") +
   facet_grid(.~arms)
 ```
-
-
+<br> As we can see from the above spaghetti plot, there's a clear positive trend in the experiment group as time goes by. On the contrary, the overall trend in the control group is nearly horizontal.<br>
 
 ## Problem 3
 ```{r}
@@ -66,10 +162,20 @@ iris_impute = function(col_vec){
     vec_mean = mean(col_vec, na.rm = TRUE)
     col_vec = replace_na(col_vec, vec_mean)
   }
+  return(col_vec)
 }
+
+# applied the function to the iris_with_missing dataset
 iris_filled = 
   map(iris_with_missing, iris_impute) %>% 
   as_tibble() 
-iris_filled %>% skimr::skim()
 ```
-Results shown by `skimr::skim()` shows the completeness of the dataset. 
+
+<br>Finally, I generate a table that counts NA values of the `iris_filled` dataset to demonstrate efficacies of the `iris_impute` function
+```{r, message=FALSE, warning=FALSE}
+iris_filled %>% 
+  select(everything()) %>%  
+  summarise_all(funs(sum(is.na(.)))) %>% 
+  knitr::kable()
+```
+Results above show the completeness of the data set after applying the `iris_impute()` function to `iris_with_missing` data set.
